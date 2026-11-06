@@ -28,14 +28,16 @@ export const ROLLEN_NAMEN = {
 export const ROLLEN = Object.keys(ROLLEN_NAMEN);
 
 const ZEILE = { TW: 'TOR', IV: 'ABW', LV: 'ABW', RV: 'ABW', ZDM: 'MIT', ZM: 'MIT', ZOM: 'MIT', LM: 'MIT', RM: 'MIT', LF: 'STU', RF: 'STU', ST: 'STU' };
+// Höhe auf dem Feld (0 = Tor, 5 = ganz vorn): ZDM steht tiefer als ZM, ZOM weiter vorn.
+const REIHE = { TW: 0, IV: 1, LV: 1, RV: 1, ZDM: 2, ZM: 3, LM: 3, RM: 3, ZOM: 4, ST: 5, LF: 5, RF: 5 };
 // Welche Spieler-Rollen ein Feld nehmen darf: Flügel im Sturm nehmen auch die Außenspieler des Mittelfelds.
 const AKZEPTIERT = { LF: ['LF', 'LM'], RF: ['RF', 'RM'] };
 
-// Felder einer Formation: [{ rolle, zeile, akzeptiert }]
+// Felder einer Formation: [{ rolle, zeile, reihe, akzeptiert }]
 export function slotDefs(formation) {
   const auf = AUFSTELLUNG[formation];
   if (!auf) throw new Error(`Unbekannte Formation: ${formation}`);
-  return auf.map((rolle) => ({ rolle, zeile: ZEILE[rolle], akzeptiert: AKZEPTIERT[rolle] || [rolle] }));
+  return auf.map((rolle) => ({ rolle, zeile: ZEILE[rolle], reihe: REIHE[rolle], akzeptiert: AKZEPTIERT[rolle] || [rolle] }));
 }
 
 // Alle Rollen, die der Spieler spielen kann (Hauptrolle zuerst, dann Nebenpositionen).

@@ -41,3 +41,8 @@ textarea, input { font: inherit; padding: 12px; border: 2px solid #b9d3c0; borde
 @keyframes puls { 50% { transform: scale(1.1); } }
 .verein-zeile { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .geist { position: fixed; z-index: 99; pointer-events: none; transform: translate(-50%, -120%); background: var(--akzent); color: #12261a; font-weight: 700; padding: 8px 12px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.4); }
+
+.feld { gap: 3px; padding: 6px; }
+.feld-zeile { min-height: 46px; }
+.feld-platz { height: 46px; }
+.feld-platz strong { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 2px; }

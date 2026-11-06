@@ -1,7 +1,7 @@
 const CACHE = 'draft-fussball';
 const DATEIEN = [
   './', 'index.html', 'css/style.css', 'manifest.json',
-  'icons/icon-192.png', 'icons/icon-512.png',
+  'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png',
   'js/app.js', 'js/rng.js', 'js/formationen.js', 'js/team.js', 'js/draft.js',
   'js/sim.js', 'js/saison.js', 'js/code.js', 'js/speicher.js', 'js/spieler-daten.js',
 ];

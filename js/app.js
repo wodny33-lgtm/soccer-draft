@@ -160,9 +160,29 @@ function kopf() {
     z.ansicht === 'home' ? null : knopf('Start', () => zeige('home'), 'klein'));
 }
 
+// Installation als App: Android/Chrome über beforeinstallprompt, iPhone nur per Hinweis.
+let installEreignis = null;
+const istInstalliert = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const istIos = () => /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEreignis = e; if (z.ansicht === 'home') render(); });
+window.addEventListener('appinstalled', () => { installEreignis = null; if (z.ansicht === 'home') render(); });
+
+function installBanner() {
+  if (istInstalliert()) return null;
+  if (installEreignis) {
+    return knopf('📲 Als App installieren', async () => {
+      const e = installEreignis; installEreignis = null;
+      e.prompt(); await e.userChoice; render();
+    }, 'zweit');
+  }
+  if (istIos()) return h('p', { class: 'hinweis' }, '📲 Als App: unten auf Teilen tippen, dann „Zum Home-Bildschirm“.');
+  return null;
+}
+
 function ansichtHome() {
   return h('main', {},
     h('p', { class: 'hinweis' }, `Bundesliga · ${DATEN.spieler.length} Spieler · unbegrenzt spielen`),
+    installBanner(),
     knopf('Neuer Draft', () => { z.modus = 'saison'; zeige('formation'); }),
     knopf('Duell gegen Familie', () => { z.modus = 'duell'; zeige('formation'); }, 'zweit'),
     knopf('Statistik', () => zeige('statistik'), 'zweit'));
@@ -175,8 +195,9 @@ function ansichtFormation() {
 
 function feldAnsicht() {
   const d = z.draft;
-  const zeilen = ['STU', 'MIT', 'ABW', 'TOR'].map((p) => h('div', { class: 'feld-zeile' },
-    d.slots.map((slot, i) => (slot.zeile !== p ? null : h('div', {
+  const reihen = [...new Set(d.slots.map((s) => s.reihe))].sort((a, b) => b - a); // vorn oben, Tor unten
+  const zeilen = reihen.map((p) => h('div', { class: 'feld-zeile' },
+    d.slots.map((slot, i) => (slot.reihe !== p ? null : h('div', {
       class: `feld-platz${d.platz[i] ? ' besetzt' : ''}`, 'data-slot': i,
       onclick: () => { if (d.auswahl) platziere(d.auswahl, i); },
     }, d.platz[i]

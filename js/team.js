@@ -1,4 +1,4 @@
-import { POSITIONEN, FORMATIONEN } from './formationen.js';
+import { POSITIONEN, slotDefs, passtAufSlot } from './formationen.js';
 
 // Stärke eines Platzhalters, wenn für eine Position kein Spieler vorhanden ist.
 export const LUECKEN_STAERKE = 40;
@@ -20,21 +20,24 @@ export function teamStaerke(kader) {
   return POSITIONEN.reduce((summe, pos) => summe + GEWICHTE[pos] * l[pos], 0);
 }
 
-// Beste Elf aus einer Spielerliste. Fehlende Plätze werden mit LUECKEN_STAERKE aufgefüllt.
+// Beste Elf aus einer Spielerliste, passend zu den Feldern der Formation. Fehlende Plätze werden mit LUECKEN_STAERKE aufgefüllt.
 export function besteElf(spieler, formation = '4-3-3') {
-  const f = FORMATIONEN[formation];
-  if (!f) throw new Error(`Unbekannte Formation: ${formation}`);
+  const defs = slotDefs(formation);
+  const frei = [...spieler].sort((a, b) => b.staerke - a.staerke);
   const elf = [];
-  for (const pos of POSITIONEN) {
-    const beste = spieler
-      .filter((s) => s.pos === pos)
-      .sort((a, b) => b.staerke - a.staerke)
-      .slice(0, f[pos]);
-    elf.push(...beste);
-    for (let i = beste.length; i < f[pos]; i++) {
-      elf.push({ id: -1, name: 'Lücke', verein: '', pos, staerke: LUECKEN_STAERKE });
+  // Seltene Rollen zuerst belegen, damit sie nicht von Allgemeinen weggenommen werden.
+  const reihenfolge = defs.map((d, i) => i).sort((a, b) => frei.filter((s) => passtAufSlot(defs[a], s)).length - frei.filter((s) => passtAufSlot(defs[b], s)).length);
+  const platz = new Array(defs.length);
+  for (const i of reihenfolge) {
+    const k = frei.findIndex((s) => passtAufSlot(defs[i], s));
+    if (k >= 0) {
+      platz[i] = { ...frei[k], pos: defs[i].zeile };
+      frei.splice(k, 1);
+    } else {
+      platz[i] = { id: -1, name: 'Lücke', verein: '', pos: defs[i].zeile, staerke: LUECKEN_STAERKE };
     }
   }
+  elf.push(...platz);
   return elf;
 }
 

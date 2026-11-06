@@ -1,8 +1,8 @@
 import { DATEN } from './spieler-daten.js';
 import { createRng } from './rng.js';
-import { FORMATIONEN, POSITIONEN, POS_NAMEN, slotsFuer } from './formationen.js';
+import { FORMATIONEN, POSITIONEN, POS_NAMEN, ROLLEN, ROLLEN_NAMEN, slotDefs, passtAufSlot } from './formationen.js';
 import { teamStaerke, linienStaerke, vereinsStaerke } from './team.js';
-import { freiePlaetze, ziehVerein } from './draft.js';
+import { moeglicheFelder, ziehVerein } from './draft.js';
 import { simuliereSpiel, waehleTorschuetzen } from './sim.js';
 import { startSaison, naechsterSpieltag, saisonFertig, sortiere, platzVon } from './saison.js';
 import { exportiereKader, importiereKader } from './code.js';
@@ -41,26 +41,28 @@ const knopf = (text, onclick, klasse = '') => h('button', { class: `knopf ${klas
 const zeige = (ansicht) => { z.ansicht = ansicht; render(); };
 
 function kaderListe(kader) {
+  const sortiert = [...kader].sort((a, b) => POSITIONEN.indexOf(a.pos) - POSITIONEN.indexOf(b.pos));
   return h('ul', { class: 'liste' },
-    kader.map((s) => h('li', {}, h('span', {}, `${POS_NAMEN[s.pos]}: ${s.name}`), h('strong', {}, s.staerke))));
+    sortiert.map((s) => h('li', {}, h('span', {}, `${s.rolle || POS_NAMEN[s.pos]}: ${s.name}`), h('strong', {}, s.staerke))));
 }
 
 // ---------- Draft ----------
 function startDraft(formation) {
-  const slots = slotsFuer(formation);
+  const slots = slotDefs(formation);
   z.draft = { formation, slots, kader: [], platz: slots.map(() => null), joker: true, auswahl: null, verein: null, vereine: [] };
   naechsterVerein();
 }
 function naechsterVerein() {
   const d = z.draft;
-  d.verein = ziehVerein(DATEN.spieler, d.slots, d.kader, d.vereine, createRng());
+  d.verein = ziehVerein(DATEN.spieler, d.slots, d.platz, d.vereine, createRng());
   if (d.verein) d.vereine.push(d.verein);
 }
 function platziere(spieler, index) {
   const d = z.draft;
-  if (d.platz[index] || d.slots[index] !== spieler.pos) return false;
-  d.platz[index] = spieler;
-  d.kader.push(spieler);
+  if (d.platz[index] || !passtAufSlot(d.slots[index], spieler)) return false;
+  const imTeam = { ...spieler, pos: d.slots[index].zeile }; // zählt in der Linie des Felds
+  d.platz[index] = imTeam;
+  d.kader.push(imTeam);
   d.auswahl = null;
   if (d.kader.length === d.slots.length) zeige(z.modus === 'duell' ? 'duell' : 'kader');
   else { naechsterVerein(); render(); }
@@ -79,7 +81,7 @@ function markiere() {
   const d = z.draft;
   document.querySelectorAll('.feld-platz').forEach((el) => {
     const i = Number(el.dataset.slot);
-    el.classList.toggle('moeglich', !!d.auswahl && !d.platz[i] && d.slots[i] === d.auswahl.pos);
+    el.classList.toggle('moeglich', !!d.auswahl && !d.platz[i] && passtAufSlot(d.slots[i], d.auswahl));
   });
   document.querySelectorAll('.karte').forEach((el) => el.classList.toggle('gewaehlt', !!d.auswahl && el.dataset.id === String(d.auswahl.id)));
 }
@@ -174,38 +176,36 @@ function ansichtFormation() {
 function feldAnsicht() {
   const d = z.draft;
   const zeilen = ['STU', 'MIT', 'ABW', 'TOR'].map((p) => h('div', { class: 'feld-zeile' },
-    d.slots.map((pos, i) => (pos !== p ? null : h('div', {
+    d.slots.map((slot, i) => (slot.zeile !== p ? null : h('div', {
       class: `feld-platz${d.platz[i] ? ' besetzt' : ''}`, 'data-slot': i,
-      onclick: () => { if (d.auswahl && platziere(d.auswahl, i)) return; },
+      onclick: () => { if (d.auswahl) platziere(d.auswahl, i); },
     }, d.platz[i]
-      ? [h('strong', {}, d.platz[i].name.split(' ').slice(-1)[0]), h('small', {}, d.platz[i].staerke)]
-      : h('small', {}, p))))));
+      ? [h('strong', {}, d.platz[i].name.split(' ').slice(-1)[0]), h('small', {}, `${slot.rolle} · ${d.platz[i].staerke}`)]
+      : h('small', {}, slot.rolle))))));
   return h('div', { class: 'feld' }, zeilen);
 }
 
 function ansichtDraft() {
   const d = z.draft;
-  const frei = freiePlaetze(d.slots, d.kader);
   const gewaehlt = new Set(d.kader.map((s) => s.id));
-  const spieler = DATEN.spieler.filter((s) => s.verein === d.verein && !gewaehlt.has(s.id));
+  // Nur Spieler, die auf ein noch freies Feld passen.
+  const spieler = DATEN.spieler.filter((s) => s.verein === d.verein && !gewaehlt.has(s.id) && moeglicheFelder(d.slots, d.platz, s).length);
   return h('main', { class: 'draft' },
     feldAnsicht(),
     h('div', { class: 'verein-zeile' },
       h('h2', {}, d.verein),
       d.joker ? knopf('🎲 Neu würfeln (1× Joker)', wuerfeln, 'klein') : h('small', { class: 'hinweis' }, 'Joker verbraucht')),
     h('p', { class: 'hinweis' }, 'Spieler antippen, dann ein farbiges Feld antippen – oder am ⠿ ins Feld ziehen.'),
-    POSITIONEN.map((p) => {
-      if (!frei[p]) return null; // volle Positionen ausblenden
-      const liste = spieler.filter((s) => s.pos === p).sort((a, b) => b.staerke - a.staerke);
+    ROLLEN.map((r) => {
+      const liste = spieler.filter((s) => s.rolle === r).sort((a, b) => b.staerke - a.staerke);
       if (!liste.length) return null;
-      return h('div', {}, h('h3', {}, POS_NAMEN[p]),
+      return h('div', {}, h('h3', {}, ROLLEN_NAMEN[r]),
         h('div', { class: 'karten' }, liste.map((s) => {
-          const gesperrt = !frei[p];
-          const karte = h('div', { class: `karte${gesperrt ? ' gesperrt' : ''}`, 'data-id': s.id },
-            gesperrt ? null : h('span', { class: 'griff', onpointerdown: (e) => startZiehen(e, s) }, '⠿'),
-            h('strong', {}, s.name), h('span', {}, gesperrt ? 'Position besetzt' : ''),
+          const karte = h('div', { class: 'karte', 'data-id': s.id },
+            h('span', { class: 'griff', onpointerdown: (e) => startZiehen(e, s) }, '⠿'),
+            h('strong', {}, s.name), h('span', {}, `${s.rolle} · ${s.verein}`),
             h('span', { class: 'wert' }, s.staerke));
-          if (!gesperrt) karte.addEventListener('click', () => { d.auswahl = d.auswahl === s ? null : s; markiere(); });
+          karte.addEventListener('click', () => { d.auswahl = d.auswahl === s ? null : s; markiere(); });
           return karte;
         })));
     }));

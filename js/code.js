@@ -1,4 +1,4 @@
-import { FORMATIONEN, POSITIONEN, slotsFuer } from './formationen.js';
+import { FORMATIONEN, weiseZu } from './formationen.js';
 
 const PRAEFIX = 'GD1';
 
@@ -49,12 +49,8 @@ export function importiereKader(text, daten) {
     return spieler;
   });
 
-  const erwartet = slotsFuer(formation);
-  const ok =
-    kader.length === erwartet.length &&
-    POSITIONEN.every((p) => kader.filter((s) => s.pos === p).length === erwartet.filter((e) => e === p).length) &&
-    new Set(kader.map((s) => s.id)).size === kader.length;
-  if (!ok) throw new Error('Der Kader passt nicht zur Formation.');
+  const zugewiesen = new Set(kader.map((s) => s.id)).size === kader.length ? weiseZu(formation, kader) : null;
+  if (!zugewiesen) throw new Error('Der Kader passt nicht zur Formation.');
 
-  return { formation, kader };
+  return { formation, kader: zugewiesen };
 }

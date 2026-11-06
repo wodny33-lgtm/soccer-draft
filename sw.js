@@ -7,7 +7,7 @@ const DATEIEN = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(DATEIEN)));
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(DATEIEN.map((d) => new Request(d, { cache: 'reload' })))));
   self.skipWaiting();
 });
 
@@ -15,19 +15,20 @@ self.addEventListener('activate', (e) => {
   e.waitUntil(self.clients.claim());
 });
 
-// Aus dem Cache antworten, im Hintergrund aktualisieren (neue Version beim nächsten Start).
+// Erst das Netz fragen (immer die neueste Version), ohne Netz aus dem Cache (Offline-Betrieb).
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   e.respondWith(
     caches.open(CACHE).then(async (cache) => {
-      const treffer = await cache.match(e.request);
-      const netz = fetch(e.request)
-        .then((r) => {
-          if (r.ok) cache.put(e.request, r.clone());
-          return r;
-        })
-        .catch(() => treffer);
-      return treffer || netz;
+      try {
+        const r = await fetch(e.request, { cache: 'no-cache' });
+        if (r.ok) cache.put(e.request, r.clone());
+        return r;
+      } catch {
+        const treffer = await cache.match(e.request);
+        if (treffer) return treffer;
+        throw new Error('offline');
+      }
     }),
   );
 });

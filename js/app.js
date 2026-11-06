@@ -14,6 +14,7 @@ const wurzel = document.getElementById('app');
 const z = {
   ansicht: 'home',
   draft: null,
+  modus: 'saison',
   saison: null,
   letzterTag: [],
   saisonGespeichert: false,
@@ -61,7 +62,7 @@ function platziere(spieler, index) {
   d.platz[index] = spieler;
   d.kader.push(spieler);
   d.auswahl = null;
-  if (d.kader.length === d.slots.length) zeige('kader');
+  if (d.kader.length === d.slots.length) zeige(z.modus === 'duell' ? 'duell' : 'kader');
   else { naechsterVerein(); render(); }
   return true;
 }
@@ -160,8 +161,8 @@ function kopf() {
 function ansichtHome() {
   return h('main', {},
     h('p', { class: 'hinweis' }, `Bundesliga · ${DATEN.spieler.length} Spieler · unbegrenzt spielen`),
-    knopf('Neuer Draft', () => zeige('formation')),
-    knopf('Duell gegen Familie', () => zeige('duell'), 'zweit'),
+    knopf('Neuer Draft', () => { z.modus = 'saison'; zeige('formation'); }),
+    knopf('Duell gegen Familie', () => { z.modus = 'duell'; zeige('formation'); }, 'zweit'),
     knopf('Statistik', () => zeige('statistik'), 'zweit'));
 }
 
@@ -227,7 +228,7 @@ function aktuellerCode() {
   return exportiereKader({ version: DATEN.version, formation: z.draft.formation, ids: z.draft.kader.map((s) => s.id) });
 }
 
-function ansichtTeilen() {
+function codeBlock() {
   const code = aktuellerCode();
   const meldung = h('p', { class: 'hinweis' }, '');
   const teilen = async () => {
@@ -236,9 +237,12 @@ function ansichtTeilen() {
       else { await navigator.clipboard.writeText(code); meldung.textContent = 'Code kopiert.'; }
     } catch { meldung.textContent = 'Bitte den Code von Hand kopieren.'; }
   };
-  return h('main', {}, h('h2', {}, 'Kader-Code'),
-    h('textarea', { rows: '3', readonly: 'readonly' }, code),
-    knopf('Teilen oder kopieren', teilen), meldung,
+  return h('div', {}, h('textarea', { rows: '3', readonly: 'readonly' }, code),
+    knopf('Teilen oder kopieren', teilen), meldung);
+}
+
+function ansichtTeilen() {
+  return h('main', {}, h('h2', {}, 'Kader-Code'), codeBlock(),
     knopf('Zurück zum Kader', () => zeige('kader'), 'zweit'));
 }
 
@@ -269,14 +273,13 @@ function ansichtSaison() {
 }
 
 function ansichtDuell() {
-  const feld = h('textarea', { rows: '3', placeholder: 'Kader-Code einfügen' });
+  if (!z.draft || z.draft.kader.length < z.draft.slots.length) { z.modus = 'duell'; return ansichtFormation(); }
+  const k = z.draft.kader;
+  const feld = h('textarea', { rows: '3', placeholder: 'Kader-Code des Gegners einfügen' });
   const name = h('input', { placeholder: 'Name des Gegners' });
   const ausgabe = h('div', {});
   const los = () => {
     ausgabe.replaceChildren();
-    if (!z.draft || z.draft.kader.length < z.draft.slots.length) {
-      return ausgabe.append(h('p', { class: 'fehler' }, 'Zuerst einen Draft abschließen.'));
-    }
     try {
       const gegner = importiereKader(feld.value, DATEN);
       ausgabe.append(duellErgebnis(gegner, name.value.trim() || 'Gegner'));
@@ -285,10 +288,11 @@ function ansichtDuell() {
     }
   };
   return h('main', {}, h('h2', {}, 'Duell gegen die Familie'),
-    z.draft && z.draft.kader.length === z.draft.slots.length
-      ? knopf('Meinen Kader-Code zeigen', () => zeige('teilen'), 'zweit')
-      : h('p', { class: 'hinweis' }, 'Draft zuerst abschließen, dann kannst du spielen.'),
-    feld, name, knopf('Spielen', los), ausgabe);
+    h('p', { class: 'gross' }, `Dein Team ${z.draft.formation} · Stärke ${teamStaerke(k).toFixed(1)}`),
+    kaderListe(k),
+    h('h3', {}, '1. Deinen Code verschicken'), codeBlock(),
+    h('h3', {}, '2. Gegen einen Code spielen'), feld, name, knopf('Spielen', los), ausgabe,
+    knopf('Neues Duell mit neuem Draft', () => { z.modus = 'duell'; zeige('formation'); }, 'zweit'));
 }
 
 function duellErgebnis(gegner, gegnerName) {

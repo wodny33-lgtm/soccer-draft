@@ -2,7 +2,7 @@ import { DATEN } from './spieler-daten.js';
 import { createRng } from './rng.js';
 import { FORMATIONEN, POSITIONEN, POS_NAMEN, slotsFuer } from './formationen.js';
 import { teamStaerke, linienStaerke, vereinsStaerke } from './team.js';
-import { ziehKarten } from './draft.js';
+import { freiePlaetze, ziehVerein } from './draft.js';
 import { simuliereSpiel, waehleTorschuetzen } from './sim.js';
 import { startSaison, naechsterSpieltag, saisonFertig, sortiere, platzVon } from './saison.js';
 import { exportiereKader, importiereKader } from './code.js';
@@ -27,7 +27,8 @@ function h(tag, attrs = {}, ...kinder) {
   for (const [k, v] of Object.entries(attrs)) {
     if (k === 'onclick') el.addEventListener('click', v);
     else if (k === 'class') el.className = v;
-    else el.setAttribute(k, v);
+    else if (v === false) continue;
+    else el.setAttribute(k, v === true ? '' : v);
   }
   for (const kind of kinder.flat()) {
     if (kind === null || kind === undefined || kind === false) continue;
@@ -46,18 +47,19 @@ function kaderListe(kader) {
 // ---------- Draft ----------
 function startDraft(formation) {
   const slots = slotsFuer(formation);
-  z.draft = { formation, slots, kader: [], karten: [] };
-  z.draft.karten = neueKarten();
+  z.draft = { formation, slots, kader: [], verein: null, vereine: [] };
+  naechsterVerein();
 }
-function neueKarten() {
+function naechsterVerein() {
   const d = z.draft;
-  return ziehKarten(DATEN.spieler, d.slots[d.kader.length], d.kader.map((s) => s.id), createRng(), 5);
+  d.verein = ziehVerein(DATEN.spieler, d.slots, d.kader, d.vereine, createRng());
+  if (d.verein) d.vereine.push(d.verein);
 }
 function waehle(spieler) {
   const d = z.draft;
   d.kader.push(spieler);
   if (d.kader.length === d.slots.length) return zeige('kader');
-  d.karten = neueKarten();
+  naechsterVerein();
   render();
 }
 
@@ -126,12 +128,22 @@ function ansichtFormation() {
 
 function ansichtDraft() {
   const d = z.draft;
-  const pos = d.slots[d.kader.length];
+  const frei = freiePlaetze(d.slots, d.kader);
+  const gewaehlt = new Set(d.kader.map((s) => s.id));
+  const spieler = DATEN.spieler.filter((s) => s.verein === d.verein && !gewaehlt.has(s.id));
+  const offen = POSITIONEN.filter((p) => frei[p]).map((p) => `${POS_NAMEN[p]} ${frei[p]}`).join(' · ');
   return h('main', {},
-    h('h2', {}, `Pick ${d.kader.length + 1} von ${d.slots.length}: ${POS_NAMEN[pos]}`),
-    h('div', { class: 'karten' }, d.karten.map((s) =>
-      h('button', { class: 'karte', onclick: () => waehle(s) },
-        h('strong', {}, s.name), h('span', {}, s.verein), h('span', { class: 'wert' }, s.staerke)))),
+    h('h2', {}, `Pick ${d.kader.length + 1} von ${d.slots.length}: ${d.verein}`),
+    h('p', { class: 'hinweis' }, `Noch frei: ${offen}`),
+    POSITIONEN.map((p) => {
+      const liste = spieler.filter((s) => s.pos === p).sort((a, b) => b.staerke - a.staerke);
+      if (!liste.length) return null;
+      return h('div', {}, h('h3', {}, POS_NAMEN[p]),
+        h('div', { class: 'karten' }, liste.map((s) =>
+          h('button', { class: 'karte', disabled: !frei[p], onclick: () => waehle(s) },
+            h('strong', {}, s.name), h('span', {}, frei[p] ? 'wählbar' : 'Position besetzt'),
+            h('span', { class: 'wert' }, s.staerke)))));
+    }),
     d.kader.length ? h('h3', {}, 'Dein Kader bisher') : null,
     d.kader.length ? kaderListe(d.kader) : null);
 }

@@ -95,7 +95,7 @@ function vereinsListe() {
 }
 function starteSaison() {
   const kader = z.draft.kader;
-  const dein = { id: 'DU', name: 'Dein Team', staerke: teamStaerke(kader) };
+  const dein = { id: 'DU', name: spielerName() || 'Dein Team', staerke: teamStaerke(kader) };
   z.saison = startSaison(vereinsListe(), dein, kader, createRng());
   z.letzterTag = [];
   z.saisonGespeichert = false;
@@ -109,6 +109,7 @@ function weiter() {
       const zeile = s.tabelle.find((t) => t.id === 'DU');
       const ok = speicher.speichereSaison({
         datum: new Date().toISOString(),
+        name: spielerName() || undefined,
         formation: z.draft.formation,
         platz: platzVon(s, 'DU'),
         punkte: zeile.pkt,
@@ -160,9 +161,14 @@ function installBanner() {
   return null;
 }
 
+const spielerName = () => (lokal.lies(NAME_KEY) || '').trim().slice(0, 20);
+
 function ansichtHome() {
+  const name = h('input', { placeholder: 'Dein Name (wird gespeichert)', maxlength: '20', autocomplete: 'nickname', value: spielerName() });
+  name.addEventListener('input', () => lokal.schreib(NAME_KEY, name.value.trim().slice(0, 20)));
   return h('main', {},
     h('p', { class: 'hinweis' }, `Bundesliga · ${DATEN.spieler.length} Spieler · unbegrenzt spielen`),
+    name,
     installBanner(),
     knopf('Neuer Draft', () => { z.modus = 'saison'; zeige('formation'); }),
     knopf('Live-Duell (online)', () => zeige('liveStart')),
@@ -259,7 +265,7 @@ function ansichtSaison() {
     h('h2', {}, fertig ? 'Saison beendet' : s.tag === 0 ? 'Saison startet' : `Spieltag ${s.tag} von ${s.plan.length}`),
     knopf(fertig ? 'Saison speichern und beenden' : 'Weiter', fertig ? () => { weiter(); zeige('statistik'); } : weiter),
     fertig ? null : knopf('Ganze Saison simulieren', ganzeSaison, 'zweit'),
-    s.tag === 0 ? h('p', { class: 'hinweis' }, `Dein Team ersetzt ${s.ersetzt}.`) : null,
+    s.tag === 0 ? h('p', { class: 'hinweis' }, `${spielerName() || 'Dein Team'} ersetzt ${s.ersetzt}.`) : null,
     fertig ? h('p', { class: 'gross' }, `Platz ${platzVon(s, 'DU')}`) : null,
     fertig && bester ? h('p', {}, `Bester Torschütze: ${bester[0]} (${bester[1]} Tore)`) : null,
     fertig && sortiert[0] ? h('p', {}, `Meister: ${sortiert[0].name}`) : null,
@@ -337,7 +343,7 @@ function ansichtStatistik() {
       meisteTore ? h('li', {}, h('span', {}, 'Meiste Tore (eine Saison)'), h('strong', {}, meisteTore)) : null) : null,
     h('h3', {}, 'Letzte Saisons'),
     h('ul', { class: 'liste' }, [...d.saisons].reverse().slice(0, 10).map((s) =>
-      h('li', {}, h('span', {}, `${s.datum.slice(0, 10)} · ${s.formation}`, s.torschuetze ? h('small', {}, ` ⚽ ${s.torschuetze[0]} (${s.torschuetze[1]})`) : null),
+      h('li', {}, h('span', {}, `${s.datum.slice(0, 10)} · ${s.name ? `${s.name} · ` : ''}${s.formation}`, s.torschuetze ? h('small', {}, ` ⚽ ${s.torschuetze[0]} (${s.torschuetze[1]})`) : null),
         h('strong', {}, `Platz ${s.platz} · ${s.punkte} Pkt${Number.isFinite(s.tore) ? ` · ${s.tore}:${s.gegentore}` : ''}`)))),
     h('h3', {}, 'Duelle'),
     h('p', {}, `Bilanz: ${b.s} Siege · ${b.u} Remis · ${b.n} Niederlagen`),

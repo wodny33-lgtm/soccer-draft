@@ -7,7 +7,7 @@ import { simuliereSpiel, waehleTorschuetzen } from './sim.js';
 import { startSaison, naechsterSpieltag, saisonFertig, sortiere, platzVon } from './saison.js';
 import { exportiereKader, importiereKader } from './code.js';
 import { createSpeicher, duellBilanz } from './speicher.js';
-import { spielStand, liveErgebnis, neuerRaumCode, normalisiereCode, zuegeListe } from './live.js';
+import { spielStand, liveErgebnis, neuerRaumCode, normalisiereCode, zuegeListe, einladungsLink, codeAusLink } from './live.js';
 import { createVerbindung } from './liveverbindung.js';
 import { DB_URL } from './firebase-config.js';
 
@@ -23,6 +23,7 @@ const z = {
   saisonGespeichert: false,
   speicherFehler: false,
   loeschenBereit: false,
+  einladung: codeAusLink(window.location.search),
 };
 
 // ---------- Hilfen ----------
@@ -434,13 +435,14 @@ function ansichtLiveStart() {
   }
   const meldung = h('p', { class: 'fehler' }, '');
   const name = h('input', { placeholder: 'Dein Name', maxlength: '20', value: lokal.lies(NAME_KEY) || '' });
-  const code = h('input', { placeholder: 'Raum-Code, z. B. K7QF', maxlength: '5', autocapitalize: 'characters', autocomplete: 'off' });
+  const code = h('input', { placeholder: 'Raum-Code, z. B. K7QF', maxlength: '5', autocapitalize: 'characters', autocomplete: 'off', value: z.einladung || '' });
   const fuehre = async (aufgabe) => {
     meldung.textContent = '';
     try { await aufgabe(); } catch (e) { meldung.textContent = e.message; }
   };
   const gespeichert = (() => { try { return JSON.parse(lokal.lies(LIVE_KEY)); } catch { return null; } })();
   return h('main', {}, h('h2', {}, 'Live-Duell'),
+    z.einladung ? h('p', { class: 'gross' }, `Einladung zu Raum ${z.einladung}`) : null,
     h('p', { class: 'hinweis' }, 'Ihr draftet abwechselnd aus demselben Spielerpool. Jeden Spieler gibt es nur einmal.'),
     name,
     gespeichert && gespeichert.code ? knopf(`Zurück zu Raum ${gespeichert.code}`, () => fuehre(async () => {
@@ -461,6 +463,8 @@ function ansichtLiveStart() {
       const eingabe = normalisiereCode(code.value);
       if (eingabe.length !== 4) throw new Error('Der Raum-Code hat 4 Zeichen.');
       const raum = await verbindung.tritBei(eingabe, eigenerName(name), DATEN.version);
+      z.einladung = null;
+      window.history.replaceState(null, '', window.location.pathname);
       betreteLive(eingabe, 1, raum);
     })),
     meldung);
@@ -475,14 +479,14 @@ function ansichtLive() {
   const fehler = l.fehler ? h('p', { class: 'fehler' }, l.fehler) : null;
 
   if (!raum.gast) {
-    const link = window.location.href.split('#')[0].split('?')[0];
+    const link = einladungsLink(window.location.href, l.code);
     const teilen = async () => {
-      const text = `Soccer Draft Live-Duell: Raum-Code ${l.code}\n${link}`;
+      const text = `Soccer Draft Live-Duell: Tippe auf den Link, gib deinen Namen ein und tritt Raum ${l.code} bei.\n${link}`;
       try { if (navigator.share) await navigator.share({ text }); else await navigator.clipboard.writeText(text); } catch { /* abgebrochen */ }
     };
     return h('main', {}, h('h2', {}, 'Warte auf Mitspieler'),
       h('p', { class: 'gross' }, `Raum-Code ${l.code}`),
-      h('p', { class: 'hinweis' }, `Formation ${raum.formation}. Der Mitspieler öffnet Soccer Draft, tippt auf „Live-Duell“ und gibt den Code ein.`),
+      h('p', { class: 'hinweis' }, `Formation ${raum.formation}. Schick den Link an den Mitspieler: Er tippt ihn an, gibt seinen Namen ein und ist drin.`),
       knopf('Code teilen', teilen), fehler,
       knopf('Raum verlassen', verlasseLive, 'zweit'));
   }
@@ -551,5 +555,6 @@ function render() {
   window.scrollTo(0, 0);
 }
 
+if (z.einladung) z.ansicht = 'liveStart';
 render();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');

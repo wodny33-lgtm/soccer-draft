@@ -28,7 +28,7 @@ self.addEventListener('fetch', (e) => {
         if (r.ok) cache.put(e.request, r.clone());
         return r;
       } catch {
-        const treffer = await cache.match(e.request);
+        const treffer = await cache.match(e.request, { ignoreSearch: true });
         if (treffer) return treffer;
         throw new Error('offline');
       }

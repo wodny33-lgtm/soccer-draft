@@ -95,3 +95,13 @@ export function liveErgebnis(raum, stand) {
     staerke: [teamStaerke(a), teamStaerke(b)],
   };
 }
+
+// Einladungslink: <App-Adresse>?raum=K7QF. Der Mitspieler tippt nur noch den Link an.
+export function einladungsLink(basis, code) {
+  return `${String(basis).split('#')[0].split('?')[0]}?raum=${normalisiereCode(code)}`;
+}
+
+export function codeAusLink(suche) {
+  const code = normalisiereCode(new URLSearchParams(String(suche || '')).get('raum'));
+  return code.length === 4 ? code : '';
+}

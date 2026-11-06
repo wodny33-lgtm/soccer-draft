@@ -7,6 +7,9 @@ import { simuliereSpiel, waehleTorschuetzen } from './sim.js';
 import { startSaison, naechsterSpieltag, saisonFertig, sortiere, platzVon } from './saison.js';
 import { exportiereKader, importiereKader } from './code.js';
 import { createSpeicher, duellBilanz } from './speicher.js';
+import { spielStand, liveErgebnis, neuerRaumCode, normalisiereCode, zuegeListe } from './live.js';
+import { createVerbindung } from './liveverbindung.js';
+import { DB_URL } from './firebase-config.js';
 
 const speicher = createSpeicher(window.localStorage);
 const wurzel = document.getElementById('app');
@@ -77,8 +80,7 @@ function wuerfeln() {
   render();
 }
 // Markiert in der Oberfläche, wohin der gewählte Spieler passt (ohne neu zu zeichnen).
-function markiere() {
-  const d = z.draft;
+function markiere(d = z.draft) {
   document.querySelectorAll('.feld-platz').forEach((el) => {
     const i = Number(el.dataset.slot);
     el.classList.toggle('moeglich', !!d.auswahl && !d.platz[i] && passtAufSlot(d.slots[i], d.auswahl));
@@ -162,7 +164,8 @@ function ansichtHome() {
     h('p', { class: 'hinweis' }, `Bundesliga · ${DATEN.spieler.length} Spieler · unbegrenzt spielen`),
     installBanner(),
     knopf('Neuer Draft', () => { z.modus = 'saison'; zeige('formation'); }),
-    knopf('Duell gegen Familie', () => { z.modus = 'duell'; zeige('formation'); }, 'zweit'),
+    knopf('Live-Duell (online)', () => zeige('liveStart')),
+    knopf('Duell gegen Familie (mit Code)', () => { z.modus = 'duell'; zeige('formation'); }, 'zweit'),
     knopf('Statistik', () => zeige('statistik'), 'zweit'));
 }
 
@@ -171,42 +174,44 @@ function ansichtFormation() {
     Object.keys(FORMATIONEN).map((f) => knopf(f, () => { startDraft(f); zeige('draft'); })));
 }
 
-function feldAnsicht() {
-  const d = z.draft;
+function feldAnsicht(d = z.draft, beiPlatz = platziere) {
   const reihen = [...new Set(d.slots.map((s) => s.reihe))].sort((a, b) => b - a); // vorn oben, Tor unten
   const zeilen = reihen.map((p) => h('div', { class: 'feld-zeile' },
     d.slots.map((slot, i) => (slot.reihe !== p ? null : h('div', {
       class: `feld-platz${d.platz[i] ? ' besetzt' : ''}`, 'data-slot': i,
-      onclick: () => { if (d.auswahl) platziere(d.auswahl, i); },
+      onclick: () => { if (d.auswahl) beiPlatz(d.auswahl, i); },
     }, d.platz[i]
       ? [h('strong', {}, d.platz[i].name.split(' ').slice(-1)[0]), h('small', {}, `${slot.rolle} · ${d.platz[i].staerke}`)]
       : h('small', {}, slot.rolle))))));
   return h('div', { class: 'feld' }, zeilen);
 }
 
+// Spielerkarten des gezogenen Vereins, nach Rolle gruppiert. Nur Spieler, die auf ein freies Feld passen.
+function spielerListe(d, vergeben) {
+  const spieler = DATEN.spieler.filter((s) => s.verein === d.verein && !vergeben.has(s.id) && moeglicheFelder(d.slots, d.platz, s).length);
+  return ROLLEN.map((r) => {
+    const liste = spieler.filter((s) => s.rolle === r).sort((a, b) => b.staerke - a.staerke);
+    if (!liste.length) return null;
+    return h('div', {}, h('h3', {}, ROLLEN_NAMEN[r]),
+      h('div', { class: 'karten' }, liste.map((s) => {
+        const karte = h('div', { class: 'karte', 'data-id': s.id },
+          h('strong', {}, s.name), h('span', {}, rollenVon(s).join(' · ')),
+          h('span', { class: 'wert' }, s.staerke));
+        karte.addEventListener('click', () => { d.auswahl = d.auswahl === s ? null : s; markiere(d); });
+        return karte;
+      })));
+  });
+}
+
 function ansichtDraft() {
   const d = z.draft;
-  const gewaehlt = new Set(d.kader.map((s) => s.id));
-  // Nur Spieler, die auf ein noch freies Feld passen.
-  const spieler = DATEN.spieler.filter((s) => s.verein === d.verein && !gewaehlt.has(s.id) && moeglicheFelder(d.slots, d.platz, s).length);
   return h('main', { class: 'draft' },
     feldAnsicht(),
     h('div', { class: 'verein-zeile' },
       h('h2', {}, d.verein),
       d.joker ? knopf('🎲 Neu würfeln (1× Joker)', wuerfeln, 'klein') : h('small', { class: 'hinweis' }, 'Joker verbraucht')),
     h('p', { class: 'hinweis' }, 'Spieler antippen, dann ein farbiges Feld antippen.'),
-    ROLLEN.map((r) => {
-      const liste = spieler.filter((s) => s.rolle === r).sort((a, b) => b.staerke - a.staerke);
-      if (!liste.length) return null;
-      return h('div', {}, h('h3', {}, ROLLEN_NAMEN[r]),
-        h('div', { class: 'karten' }, liste.map((s) => {
-          const karte = h('div', { class: 'karte', 'data-id': s.id },
-            h('strong', {}, s.name), h('span', {}, rollenVon(s).join(' · ')),
-            h('span', { class: 'wert' }, s.staerke));
-          karte.addEventListener('click', () => { d.auswahl = d.auswahl === s ? null : s; markiere(); });
-          return karte;
-        })));
-    }));
+    spielerListe(d, new Set(d.kader.map((s) => s.id))));
 }
 
 function ansichtKader() {
@@ -343,9 +348,202 @@ function ansichtStatistik() {
     }, 'zweit'));
 }
 
+// ---------- Live-Duell (online, Firebase) ----------
+const verbindung = createVerbindung(DB_URL);
+const LIVE_KEY = 'soccer-draft-live';
+const NAME_KEY = 'soccer-draft-name';
+const lokal = {
+  lies(k) { try { return window.localStorage.getItem(k); } catch { return null; } },
+  schreib(k, v) { try { window.localStorage.setItem(k, v); } catch { /* Speicher gesperrt, egal */ } },
+  weg(k) { try { window.localStorage.removeItem(k); } catch { /* egal */ } },
+};
+let live = null; // { code, ich, raum, stand, fehler, timer, prueft, gespeichert }
+
+function stoppeLive() {
+  if (live) clearInterval(live.timer);
+  live = null;
+}
+function verlasseLive() {
+  stoppeLive();
+  lokal.weg(LIVE_KEY);
+  zeige('home');
+}
+function berechneLive() {
+  live.stand = spielStand(live.raum, DATEN.spieler);
+}
+function betreteLive(code, ich, raum) {
+  stoppeLive();
+  live = { code, ich, raum, stand: null, fehler: '', timer: null, prueft: false, gespeichert: false };
+  berechneLive();
+  lokal.schreib(LIVE_KEY, JSON.stringify({ code, ich }));
+  live.timer = setInterval(pruefeLive, 1500);
+  zeige('live');
+}
+
+async function pruefeLive() {
+  const l = live;
+  if (!l) return;
+  if (z.ansicht !== 'live') { clearInterval(l.timer); if (live === l) live = null; return; }
+  if (l.prueft || (l.stand && l.stand.fertig)) return;
+  l.prueft = true;
+  try {
+    const raum = await verbindung.lade(l.code);
+    if (live !== l) return;
+    if (!raum) { l.fehler = 'Der Raum existiert nicht mehr.'; clearInterval(l.timer); render(); return; }
+    const neu = zuegeListe(raum.zuege).length;
+    const lokalAnzahl = zuegeListe(l.raum.zuege).length;
+    // Ältere Antworten (weniger Züge als lokal bekannt) werden ignoriert.
+    const geaendert = neu > lokalAnzahl || (raum.gast || '') !== (l.raum.gast || '');
+    if (geaendert) { l.raum = raum; l.fehler = ''; berechneLive(); render(); }
+    else if (l.fehler) { l.fehler = ''; render(); }
+  } catch (e) {
+    if (live === l && l.fehler !== e.message) { l.fehler = e.message; render(); }
+  } finally {
+    l.prueft = false;
+  }
+}
+
+async function sendeLiveZug(zug) {
+  const l = live;
+  const bisher = zuegeListe(l.raum.zuege);
+  const neuerRaum = { ...l.raum, zuege: [...bisher, zug] };
+  const neuerStand = spielStand(neuerRaum, DATEN.spieler);
+  if (neuerStand.fehler) { l.fehler = neuerStand.fehler; render(); return; }
+  const alterRaum = l.raum;
+  l.raum = neuerRaum; l.stand = neuerStand; l.fehler = '';
+  render();
+  try {
+    await verbindung.sendeZug(l.code, bisher.length, zug);
+  } catch (e) {
+    if (live !== l) return;
+    l.raum = alterRaum; berechneLive(); l.fehler = `${e.message} Zug nochmal versuchen.`;
+    render();
+  }
+}
+
+function eigenerName(feld) {
+  const name = feld.value.trim().slice(0, 20) || 'Spieler';
+  lokal.schreib(NAME_KEY, name);
+  return name;
+}
+
+function ansichtLiveStart() {
+  if (!verbindung.aktiv) {
+    return h('main', {}, h('h2', {}, 'Live-Duell'),
+      h('p', {}, 'Das Live-Duell ist noch nicht eingerichtet. Dafür fehlt die Firebase-Adresse in js/firebase-config.js (Anleitung: README, Abschnitt „Live-Duell“).'));
+  }
+  const meldung = h('p', { class: 'fehler' }, '');
+  const name = h('input', { placeholder: 'Dein Name', maxlength: '20', value: lokal.lies(NAME_KEY) || '' });
+  const code = h('input', { placeholder: 'Raum-Code, z. B. K7QF', maxlength: '5', autocapitalize: 'characters', autocomplete: 'off' });
+  const fuehre = async (aufgabe) => {
+    meldung.textContent = '';
+    try { await aufgabe(); } catch (e) { meldung.textContent = e.message; }
+  };
+  const gespeichert = (() => { try { return JSON.parse(lokal.lies(LIVE_KEY)); } catch { return null; } })();
+  return h('main', {}, h('h2', {}, 'Live-Duell'),
+    h('p', { class: 'hinweis' }, 'Ihr draftet abwechselnd aus demselben Spielerpool. Jeden Spieler gibt es nur einmal.'),
+    name,
+    gespeichert && gespeichert.code ? knopf(`Zurück zu Raum ${gespeichert.code}`, () => fuehre(async () => {
+      const raum = await verbindung.lade(gespeichert.code);
+      if (!raum) { lokal.weg(LIVE_KEY); throw new Error('Dieser Raum existiert nicht mehr.'); }
+      betreteLive(gespeichert.code, gespeichert.ich, raum);
+    })) : null,
+    h('h3', {}, 'Raum erstellen: Formation wählen'),
+    Object.keys(FORMATIONEN).map((f) => knopf(f, () => fuehre(async () => {
+      const neuerCode = neuerRaumCode();
+      const raum = { version: DATEN.version, formation: f, seed: (Math.random() * 2 ** 32) >>> 0, host: eigenerName(name), erstellt: Date.now() };
+      await verbindung.erstelle(neuerCode, raum);
+      betreteLive(neuerCode, 0, { ...raum, zuege: [] });
+    }), 'zweit')),
+    h('h3', {}, 'Einem Raum beitreten'),
+    code,
+    knopf('Beitreten', () => fuehre(async () => {
+      const eingabe = normalisiereCode(code.value);
+      if (eingabe.length !== 4) throw new Error('Der Raum-Code hat 4 Zeichen.');
+      const raum = await verbindung.tritBei(eingabe, eigenerName(name), DATEN.version);
+      betreteLive(eingabe, 1, raum);
+    })),
+    meldung);
+}
+
+function ansichtLive() {
+  const l = live;
+  if (!l) return ansichtLiveStart();
+  const { raum, stand, ich } = l;
+  const meinName = ich === 0 ? raum.host : raum.gast;
+  const gegnerName = (ich === 0 ? raum.gast : raum.host) || 'Mitspieler';
+  const fehler = l.fehler ? h('p', { class: 'fehler' }, l.fehler) : null;
+
+  if (!raum.gast) {
+    const link = window.location.href.split('#')[0].split('?')[0];
+    const teilen = async () => {
+      const text = `Soccer Draft Live-Duell: Raum-Code ${l.code}\n${link}`;
+      try { if (navigator.share) await navigator.share({ text }); else await navigator.clipboard.writeText(text); } catch { /* abgebrochen */ }
+    };
+    return h('main', {}, h('h2', {}, 'Warte auf Mitspieler'),
+      h('p', { class: 'gross' }, `Raum-Code ${l.code}`),
+      h('p', { class: 'hinweis' }, `Formation ${raum.formation}. Der Mitspieler öffnet Soccer Draft, tippt auf „Live-Duell“ und gibt den Code ein.`),
+      knopf('Code teilen', teilen), fehler,
+      knopf('Raum verlassen', verlasseLive, 'zweit'));
+  }
+
+  const d = { slots: stand.slots, platz: stand.seiten[ich].platz, auswahl: null, verein: stand.verein };
+  const anzahl = stand.slots.length;
+  const status = h('p', { class: 'hinweis' },
+    `Raum ${l.code} · ${meinName} gegen ${gegnerName} · Dein Team ${stand.seiten[ich].kader.length}/${anzahl} · ${gegnerName} ${stand.seiten[1 - ich].kader.length}/${anzahl}`);
+
+  if (stand.fehler) {
+    return h('main', {}, h('h2', {}, 'Live-Duell'), status, h('p', { class: 'fehler' }, `Der Spielstand ist nicht stimmig: ${stand.fehler}.`),
+      knopf('Raum verlassen', verlasseLive, 'zweit'));
+  }
+
+  if (stand.fertig) {
+    const e = liveErgebnis(raum, stand);
+    if (!l.gespeichert) {
+      l.gespeichert = true;
+      lokal.weg(LIVE_KEY);
+      clearInterval(l.timer);
+      speicher.speichereDuell({ datum: new Date().toISOString(), gegner: gegnerName, tore: e.tore[ich], gegentore: e.tore[1 - ich] });
+    }
+    const urteil = e.tore[ich] > e.tore[1 - ich] ? 'Du gewinnst!' : e.tore[ich] < e.tore[1 - ich] ? `${gegnerName} gewinnt.` : 'Unentschieden.';
+    return h('main', {}, h('h2', {}, 'Live-Duell beendet'),
+      h('p', { class: 'gross' }, `${meinName} ${e.tore[ich]}:${e.tore[1 - ich]} ${gegnerName}`),
+      h('p', {}, urteil),
+      h('p', {}, `Deine Tore: ${e.schuetzen[ich].join(', ') || 'keine'}`),
+      h('p', {}, `Tore von ${gegnerName}: ${e.schuetzen[1 - ich].join(', ') || 'keine'}`),
+      h('p', { class: 'hinweis' }, `Stärke: du ${e.staerke[ich].toFixed(1)} · ${gegnerName} ${e.staerke[1 - ich].toFixed(1)}`),
+      h('h3', {}, 'Dein Team'), kaderListe(stand.seiten[ich].kader),
+      h('h3', {}, `Team von ${gegnerName}`), kaderListe(stand.seiten[1 - ich].kader),
+      knopf('Neues Live-Duell', () => { stoppeLive(); zeige('liveStart'); }),
+      knopf('Start', () => { stoppeLive(); zeige('home'); }, 'zweit'));
+  }
+
+  const meinZug = stand.aktiv === ich;
+  const beiPlatz = (spieler, i) => {
+    if (meinZug && !d.platz[i] && passtAufSlot(d.slots[i], spieler)) sendeLiveZug({ s: ich, id: spieler.id, slot: i });
+  };
+  const gegnerTeam = stand.seiten[1 - ich].kader;
+  return h('main', { class: 'draft' },
+    status, fehler,
+    feldAnsicht(d, beiPlatz),
+    meinZug
+      ? [h('div', { class: 'verein-zeile' },
+        h('h2', {}, `Du bist dran: ${stand.verein}`),
+        stand.seiten[ich].joker
+          ? knopf('🎲 Neu würfeln (1× Joker)', () => sendeLiveZug({ s: ich, joker: true }), 'klein')
+          : h('small', { class: 'hinweis' }, 'Joker verbraucht')),
+      h('p', { class: 'hinweis' }, 'Spieler antippen, dann ein farbiges Feld antippen.'),
+      spielerListe(d, stand.vergeben)]
+      : [h('h2', {}, `${gegnerName} ist dran: ${stand.verein}`),
+        h('p', { class: 'hinweis' }, 'Warte auf den Zug. Die Seite aktualisiert sich selbst.'),
+        gegnerTeam.length ? h('h3', {}, `Team von ${gegnerName}`) : null,
+        gegnerTeam.length ? kaderListe(gegnerTeam) : null]);
+}
+
 const ANSICHTEN = {
   home: ansichtHome, formation: ansichtFormation, draft: ansichtDraft, kader: ansichtKader,
   teilen: ansichtTeilen, saison: ansichtSaison, duell: ansichtDuell, statistik: ansichtStatistik,
+  liveStart: ansichtLiveStart, live: ansichtLive,
 };
 
 function render() {

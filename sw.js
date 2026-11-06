@@ -4,6 +4,7 @@ const DATEIEN = [
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png',
   'js/app.js', 'js/rng.js', 'js/formationen.js', 'js/team.js', 'js/draft.js',
   'js/sim.js', 'js/saison.js', 'js/code.js', 'js/speicher.js', 'js/spieler-daten.js',
+  'js/live.js', 'js/liveverbindung.js', 'js/firebase-config.js',
 ];
 
 self.addEventListener('install', (e) => {
@@ -18,6 +19,8 @@ self.addEventListener('activate', (e) => {
 // Erst das Netz fragen (immer die neueste Version), ohne Netz aus dem Cache (Offline-Betrieb).
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  // Fremde Adressen (Firebase-Abfragen des Live-Duells) nie cachen.
+  if (new URL(e.request.url).origin !== self.location.origin) return;
   e.respondWith(
     caches.open(CACHE).then(async (cache) => {
       try {

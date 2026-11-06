@@ -98,6 +98,13 @@ function weiter() {
   render();
 }
 
+function ganzeSaison() {
+  const s = z.saison;
+  while (!saisonFertig(s)) naechsterSpieltag(s, createRng());
+  z.letzterTag = [];
+  weiter();
+}
+
 // ---------- Ansichten ----------
 function kopf() {
   return h('header', {}, h('h1', {}, 'Draft Fußball'),
@@ -169,6 +176,7 @@ function ansichtSaison() {
   return h('main', {},
     h('h2', {}, fertig ? 'Saison beendet' : s.tag === 0 ? 'Saison startet' : `Spieltag ${s.tag} von ${s.plan.length}`),
     knopf(fertig ? 'Saison speichern und beenden' : 'Weiter', fertig ? () => { weiter(); zeige('statistik'); } : weiter),
+    fertig ? null : knopf('Ganze Saison simulieren', ganzeSaison, 'zweit'),
     s.tag === 0 ? h('p', { class: 'hinweis' }, `Dein Team ersetzt ${s.ersetzt}.`) : null,
     fertig ? h('p', { class: 'gross' }, `Platz ${platzVon(s, 'DU')}`) : null,
     fertig && bester ? h('p', {}, `Bester Torschütze: ${bester[0]} (${bester[1]} Tore)`) : null,

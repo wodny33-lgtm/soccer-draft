@@ -1,0 +1,27 @@
+:root { --gruen: #0b5d2a; --hell: #e9f5ec; --akzent: #f2b705; --text: #12261a; }
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--hell); color: var(--text); }
+#app { max-width: 520px; margin: 0 auto; padding: 0 0 40px; }
+header { background: var(--gruen); color: #fff; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 2; }
+header h1 { font-size: 1.15rem; margin: 0; }
+main { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+h2 { margin: 4px 0; } h3 { margin: 12px 0 0; }
+.hinweis { opacity: .7; margin: 0; }
+.gross { font-size: 1.6rem; font-weight: 700; margin: 0; }
+.fehler { color: #b00020; font-weight: 600; margin: 0; }
+.knopf { font: inherit; font-weight: 700; padding: 16px; min-height: 48px; border: 0; border-radius: 14px; background: var(--gruen); color: #fff; width: 100%; cursor: pointer; }
+.knopf.zweit { background: #fff; color: var(--gruen); border: 2px solid var(--gruen); }
+.knopf.klein { width: auto; min-height: 44px; padding: 8px 14px; background: #fff; color: var(--gruen); }
+.karten { display: flex; flex-direction: column; gap: 10px; }
+.karte { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; text-align: left; font: inherit; padding: 14px; min-height: 48px; border: 2px solid var(--gruen); border-radius: 14px; background: #fff; cursor: pointer; }
+.karte strong { font-size: 1.05rem; }
+.karte span { opacity: .75; }
+.karte .wert { grid-row: 1 / 3; grid-column: 2; font-size: 1.8rem; font-weight: 800; color: var(--gruen); opacity: 1; align-self: center; }
+ul.liste { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+ul.liste li { background: #fff; padding: 8px 12px; border-radius: 10px; display: flex; justify-content: space-between; }
+table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; font-size: .92rem; }
+th, td { padding: 6px 8px; text-align: right; } th:nth-child(2), td:nth-child(2) { text-align: left; }
+tr.du { background: #fff3c4; font-weight: 700; }
+.spiel { background: #fff; padding: 8px 12px; border-radius: 10px; display: flex; justify-content: space-between; gap: 8px; }
+.spiel.du { border: 2px solid var(--akzent); }
+textarea, input { font: inherit; padding: 12px; border: 2px solid #b9d3c0; border-radius: 12px; width: 100%; }

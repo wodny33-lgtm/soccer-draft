@@ -1,6 +1,6 @@
 import { DATEN } from './spieler-daten.js';
 import { createRng } from './rng.js';
-import { FORMATIONEN, POSITIONEN, POS_NAMEN, ROLLEN, ROLLEN_NAMEN, slotDefs, passtAufSlot } from './formationen.js';
+import { FORMATIONEN, POSITIONEN, POS_NAMEN, ROLLEN, ROLLEN_NAMEN, slotDefs, passtAufSlot, rollenVon } from './formationen.js';
 import { teamStaerke, linienStaerke, vereinsStaerke } from './team.js';
 import { moeglicheFelder, ziehVerein } from './draft.js';
 import { simuliereSpiel, waehleTorschuetzen } from './sim.js';
@@ -203,7 +203,7 @@ function ansichtDraft() {
         h('div', { class: 'karten' }, liste.map((s) => {
           const karte = h('div', { class: 'karte', 'data-id': s.id },
             h('span', { class: 'griff', onpointerdown: (e) => startZiehen(e, s) }, '⠿'),
-            h('strong', {}, s.name), h('span', {}, `${s.rolle} · ${s.verein}`),
+            h('strong', {}, s.name), h('span', {}, rollenVon(s).join(' · ')),
             h('span', { class: 'wert' }, s.staerke));
           karte.addEventListener('click', () => { d.auswahl = d.auswahl === s ? null : s; markiere(); });
           return karte;

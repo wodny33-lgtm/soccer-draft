@@ -38,9 +38,15 @@ export function slotDefs(formation) {
   return auf.map((rolle) => ({ rolle, zeile: ZEILE[rolle], akzeptiert: AKZEPTIERT[rolle] || [rolle] }));
 }
 
-// Passt der Spieler auf das Feld? Ohne genaue Rolle (alte Daten) zählt die grobe Linie.
+// Alle Rollen, die der Spieler spielen kann (Hauptrolle zuerst, dann Nebenpositionen).
+export function rollenVon(spieler) {
+  return spieler.rolle ? [spieler.rolle, ...(spieler.alt || [])] : [];
+}
+
+// Passt der Spieler auf das Feld? Haupt- oder Nebenposition reicht. Ohne genaue Rolle (alte Daten) zählt die grobe Linie.
 export function passtAufSlot(slot, spieler) {
-  return spieler.rolle ? slot.akzeptiert.includes(spieler.rolle) : spieler.pos === slot.zeile;
+  if (!spieler.rolle) return spieler.pos === slot.zeile;
+  return rollenVon(spieler).some((r) => slot.akzeptiert.includes(r));
 }
 
 // Ordnet 11 Spieler den Feldern der Formation zu. Gibt Kopien mit pos = Linie des Felds zurück (oder null).

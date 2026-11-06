@@ -85,28 +85,6 @@ function markiere() {
   });
   document.querySelectorAll('.karte').forEach((el) => el.classList.toggle('gewaehlt', !!d.auswahl && el.dataset.id === String(d.auswahl.id)));
 }
-function startZiehen(ev, spieler) {
-  ev.preventDefault();
-  const d = z.draft;
-  d.auswahl = spieler;
-  markiere();
-  const geist = h('div', { class: 'geist' }, spieler.name);
-  document.body.append(geist);
-  const bewege = (e) => { geist.style.left = `${e.clientX}px`; geist.style.top = `${e.clientY}px`; };
-  bewege(ev);
-  const ende = (e) => {
-    window.removeEventListener('pointermove', bewege);
-    window.removeEventListener('pointerup', ende);
-    window.removeEventListener('pointercancel', ende);
-    geist.remove();
-    const ziel = e.type === 'pointerup' ? document.elementFromPoint(e.clientX, e.clientY)?.closest('.feld-platz') : null;
-    if (!ziel || !platziere(spieler, Number(ziel.dataset.slot))) markiere();
-  };
-  window.addEventListener('pointermove', bewege);
-  window.addEventListener('pointerup', ende);
-  window.addEventListener('pointercancel', ende);
-}
-
 // ---------- Saison ----------
 function vereinsListe() {
   const namen = [...new Set(DATEN.spieler.map((s) => s.verein))];
@@ -156,7 +134,7 @@ function ganzeSaison() {
 
 // ---------- Ansichten ----------
 function kopf() {
-  return h('header', {}, h('h1', {}, 'Draft Fußball'),
+  return h('header', {}, h('h1', {}, 'Soccer Draft'),
     z.ansicht === 'home' ? null : knopf('Start', () => zeige('home'), 'klein'));
 }
 
@@ -216,14 +194,13 @@ function ansichtDraft() {
     h('div', { class: 'verein-zeile' },
       h('h2', {}, d.verein),
       d.joker ? knopf('🎲 Neu würfeln (1× Joker)', wuerfeln, 'klein') : h('small', { class: 'hinweis' }, 'Joker verbraucht')),
-    h('p', { class: 'hinweis' }, 'Spieler antippen, dann ein farbiges Feld antippen – oder am ⠿ ins Feld ziehen.'),
+    h('p', { class: 'hinweis' }, 'Spieler antippen, dann ein farbiges Feld antippen.'),
     ROLLEN.map((r) => {
       const liste = spieler.filter((s) => s.rolle === r).sort((a, b) => b.staerke - a.staerke);
       if (!liste.length) return null;
       return h('div', {}, h('h3', {}, ROLLEN_NAMEN[r]),
         h('div', { class: 'karten' }, liste.map((s) => {
           const karte = h('div', { class: 'karte', 'data-id': s.id },
-            h('span', { class: 'griff', onpointerdown: (e) => startZiehen(e, s) }, '⠿'),
             h('strong', {}, s.name), h('span', {}, rollenVon(s).join(' · ')),
             h('span', { class: 'wert' }, s.staerke));
           karte.addEventListener('click', () => { d.auswahl = d.auswahl === s ? null : s; markiere(); });

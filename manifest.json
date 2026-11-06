@@ -1,7 +1,7 @@
 {
   "id": "./",
-  "name": "Draft Fußball",
-  "short_name": "Draft",
+  "name": "Soccer Draft",
+  "short_name": "Soccer Draft",
   "description": "Bundesliga-Draft: Stelle dein Team zusammen, spiele eine Saison oder fordere die Familie im Duell heraus.",
   "start_url": "./",
   "scope": "./",

@@ -25,7 +25,7 @@ const z = {
 function h(tag, attrs = {}, ...kinder) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
-    if (k === 'onclick') el.addEventListener('click', v);
+    if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
     else if (k === 'class') el.className = v;
     else if (v === false) continue;
     else el.setAttribute(k, v === true ? '' : v);
@@ -47,7 +47,7 @@ function kaderListe(kader) {
 // ---------- Draft ----------
 function startDraft(formation) {
   const slots = slotsFuer(formation);
-  z.draft = { formation, slots, kader: [], verein: null, vereine: [] };
+  z.draft = { formation, slots, kader: [], platz: slots.map(() => null), joker: true, auswahl: null, verein: null, vereine: [] };
   naechsterVerein();
 }
 function naechsterVerein() {
@@ -55,12 +55,53 @@ function naechsterVerein() {
   d.verein = ziehVerein(DATEN.spieler, d.slots, d.kader, d.vereine, createRng());
   if (d.verein) d.vereine.push(d.verein);
 }
-function waehle(spieler) {
+function platziere(spieler, index) {
   const d = z.draft;
+  if (d.platz[index] || d.slots[index] !== spieler.pos) return false;
+  d.platz[index] = spieler;
   d.kader.push(spieler);
-  if (d.kader.length === d.slots.length) return zeige('kader');
+  d.auswahl = null;
+  if (d.kader.length === d.slots.length) zeige('kader');
+  else { naechsterVerein(); render(); }
+  return true;
+}
+function wuerfeln() {
+  const d = z.draft;
+  if (!d.joker) return;
+  d.joker = false;
+  d.auswahl = null;
   naechsterVerein();
   render();
+}
+// Markiert in der Oberfläche, wohin der gewählte Spieler passt (ohne neu zu zeichnen).
+function markiere() {
+  const d = z.draft;
+  document.querySelectorAll('.feld-platz').forEach((el) => {
+    const i = Number(el.dataset.slot);
+    el.classList.toggle('moeglich', !!d.auswahl && !d.platz[i] && d.slots[i] === d.auswahl.pos);
+  });
+  document.querySelectorAll('.karte').forEach((el) => el.classList.toggle('gewaehlt', !!d.auswahl && el.dataset.id === String(d.auswahl.id)));
+}
+function startZiehen(ev, spieler) {
+  ev.preventDefault();
+  const d = z.draft;
+  d.auswahl = spieler;
+  markiere();
+  const geist = h('div', { class: 'geist' }, spieler.name);
+  document.body.append(geist);
+  const bewege = (e) => { geist.style.left = `${e.clientX}px`; geist.style.top = `${e.clientY}px`; };
+  bewege(ev);
+  const ende = (e) => {
+    window.removeEventListener('pointermove', bewege);
+    window.removeEventListener('pointerup', ende);
+    window.removeEventListener('pointercancel', ende);
+    geist.remove();
+    const ziel = e.type === 'pointerup' ? document.elementFromPoint(e.clientX, e.clientY)?.closest('.feld-platz') : null;
+    if (!ziel || !platziere(spieler, Number(ziel.dataset.slot))) markiere();
+  };
+  window.addEventListener('pointermove', bewege);
+  window.addEventListener('pointerup', ende);
+  window.addEventListener('pointercancel', ende);
 }
 
 // ---------- Saison ----------
@@ -126,26 +167,43 @@ function ansichtFormation() {
     Object.keys(FORMATIONEN).map((f) => knopf(f, () => { startDraft(f); zeige('draft'); })));
 }
 
+function feldAnsicht() {
+  const d = z.draft;
+  const zeilen = ['STU', 'MIT', 'ABW', 'TOR'].map((p) => h('div', { class: 'feld-zeile' },
+    d.slots.map((pos, i) => (pos !== p ? null : h('div', {
+      class: `feld-platz${d.platz[i] ? ' besetzt' : ''}`, 'data-slot': i,
+      onclick: () => { if (d.auswahl && platziere(d.auswahl, i)) return; },
+    }, d.platz[i]
+      ? [h('strong', {}, d.platz[i].name.split(' ').slice(-1)[0]), h('small', {}, d.platz[i].staerke)]
+      : h('small', {}, p))))));
+  return h('div', { class: 'feld' }, zeilen);
+}
+
 function ansichtDraft() {
   const d = z.draft;
   const frei = freiePlaetze(d.slots, d.kader);
   const gewaehlt = new Set(d.kader.map((s) => s.id));
   const spieler = DATEN.spieler.filter((s) => s.verein === d.verein && !gewaehlt.has(s.id));
-  const offen = POSITIONEN.filter((p) => frei[p]).map((p) => `${POS_NAMEN[p]} ${frei[p]}`).join(' · ');
-  return h('main', {},
-    h('h2', {}, `Pick ${d.kader.length + 1} von ${d.slots.length}: ${d.verein}`),
-    h('p', { class: 'hinweis' }, `Noch frei: ${offen}`),
+  return h('main', { class: 'draft' },
+    feldAnsicht(),
+    h('div', { class: 'verein-zeile' },
+      h('h2', {}, d.verein),
+      d.joker ? knopf('🎲 Neu würfeln (1× Joker)', wuerfeln, 'klein') : h('small', { class: 'hinweis' }, 'Joker verbraucht')),
+    h('p', { class: 'hinweis' }, 'Spieler antippen, dann ein farbiges Feld antippen – oder am ⠿ ins Feld ziehen.'),
     POSITIONEN.map((p) => {
       const liste = spieler.filter((s) => s.pos === p).sort((a, b) => b.staerke - a.staerke);
       if (!liste.length) return null;
       return h('div', {}, h('h3', {}, POS_NAMEN[p]),
-        h('div', { class: 'karten' }, liste.map((s) =>
-          h('button', { class: 'karte', disabled: !frei[p], onclick: () => waehle(s) },
-            h('strong', {}, s.name), h('span', {}, frei[p] ? 'wählbar' : 'Position besetzt'),
-            h('span', { class: 'wert' }, s.staerke)))));
-    }),
-    d.kader.length ? h('h3', {}, 'Dein Kader bisher') : null,
-    d.kader.length ? kaderListe(d.kader) : null);
+        h('div', { class: 'karten' }, liste.map((s) => {
+          const gesperrt = !frei[p];
+          const karte = h('div', { class: `karte${gesperrt ? ' gesperrt' : ''}`, 'data-id': s.id },
+            gesperrt ? null : h('span', { class: 'griff', onpointerdown: (e) => startZiehen(e, s) }, '⠿'),
+            h('strong', {}, s.name), h('span', {}, gesperrt ? 'Position besetzt' : ''),
+            h('span', { class: 'wert' }, s.staerke));
+          if (!gesperrt) karte.addEventListener('click', () => { d.auswahl = d.auswahl === s ? null : s; markiere(); });
+          return karte;
+        })));
+    }));
 }
 
 function ansichtKader() {

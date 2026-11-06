@@ -130,6 +130,9 @@ function weiter() {
         punkte: zeile.pkt,
         staerke: Math.round(teamStaerke(z.draft.kader) * 10) / 10,
         kader: z.draft.kader.map((k) => k.name),
+        tore: zeile.tore,
+        gegentore: zeile.gegen,
+        torschuetze: Object.entries(s.torschuetzen).sort((a, b) => b[1] - a[1])[0] || null,
       });
       // Nur ein ausdrückliches false gilt als Fehler (undefined = alter Stand = Erfolg).
       z.speicherFehler = ok === false;
@@ -309,15 +312,25 @@ function ansichtStatistik() {
   const d = speicher.lade();
   const b = duellBilanz(d.duelle);
   const hs = Object.entries(d.highscores);
+  const bester = d.saisons.filter((s) => s.torschuetze)
+    .map((s) => ({ name: s.torschuetze[0], tore: s.torschuetze[1] })).sort((a, b) => b.tore - a.tore)[0];
+  const meiste = Math.max(0, ...d.saisons.map((s) => s.tore || 0));
+  const meisteTore = meiste ? `${meiste} Tore` : null;
   return h('main', {}, h('h2', {}, 'Statistik'),
     z.speicherFehler ? h('p', { class: 'fehler' }, 'Statistik konnte nicht gespeichert werden.') : null,
     h('h3', {}, 'Highscores'),
     hs.length ? h('ul', { class: 'liste' }, hs.map(([f, w]) =>
       h('li', {}, h('span', {}, f), h('strong', {}, `Beste Stärke ${w.staerke} · bester Platz ${w.platz}`))))
       : h('p', { class: 'hinweis' }, 'Noch keine Saison gespielt.'),
+    d.saisons.length ? h('h3', {}, 'Rekorde') : null,
+    d.saisons.length ? h('ul', { class: 'liste' },
+      h('li', {}, h('span', {}, 'Tore gesamt'), h('strong', {}, d.saisons.reduce((a, s) => a + (s.tore || 0), 0))),
+      bester ? h('li', {}, h('span', {}, 'Bester Torschütze (eine Saison)'), h('strong', {}, `${bester.name} · ${bester.tore} Tore`)) : null,
+      meisteTore ? h('li', {}, h('span', {}, 'Meiste Tore (eine Saison)'), h('strong', {}, meisteTore)) : null) : null,
     h('h3', {}, 'Letzte Saisons'),
     h('ul', { class: 'liste' }, [...d.saisons].reverse().slice(0, 10).map((s) =>
-      h('li', {}, h('span', {}, `${s.datum.slice(0, 10)} · ${s.formation}`), h('strong', {}, `Platz ${s.platz} · ${s.punkte} Pkt`)))),
+      h('li', {}, h('span', {}, `${s.datum.slice(0, 10)} · ${s.formation}`, s.torschuetze ? h('small', {}, ` ⚽ ${s.torschuetze[0]} (${s.torschuetze[1]})`) : null),
+        h('strong', {}, `Platz ${s.platz} · ${s.punkte} Pkt${Number.isFinite(s.tore) ? ` · ${s.tore}:${s.gegentore}` : ''}`)))),
     h('h3', {}, 'Duelle'),
     h('p', {}, `Bilanz: ${b.s} Siege · ${b.u} Remis · ${b.n} Niederlagen`),
     h('ul', { class: 'liste' }, [...d.duelle].reverse().slice(0, 10).map((x) =>

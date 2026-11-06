@@ -191,6 +191,7 @@ function ansichtDraft() {
       d.joker ? knopf('🎲 Neu würfeln (1× Joker)', wuerfeln, 'klein') : h('small', { class: 'hinweis' }, 'Joker verbraucht')),
     h('p', { class: 'hinweis' }, 'Spieler antippen, dann ein farbiges Feld antippen – oder am ⠿ ins Feld ziehen.'),
     POSITIONEN.map((p) => {
+      if (!frei[p]) return null; // volle Positionen ausblenden
       const liste = spieler.filter((s) => s.pos === p).sort((a, b) => b.staerke - a.staerke);
       if (!liste.length) return null;
       return h('div', {}, h('h3', {}, POS_NAMEN[p]),
